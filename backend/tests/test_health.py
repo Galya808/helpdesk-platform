@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -5,8 +7,8 @@ from app.main import app
 
 
 @pytest.fixture
-def client():
-    with TestClient(app) as client:
+def client() -> Iterator[TestClient]:
+    with TestClient(app, follow_redirects=False) as client:
         yield client
 
 
@@ -20,4 +22,4 @@ def test_get_health_returns_http_200(client):
 
     # Assert
     assert response.status_code == 200
-    assert body["status"] == "ok"
+    assert body == {"status": "ok"}
