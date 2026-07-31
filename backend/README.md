@@ -60,3 +60,25 @@ When the application is running, Swagger UI is available at
 
 The health-check endpoint is available at
 `http://127.0.0.1:8000/health`.
+
+## Configuration
+
+Application settings are managed with Pydantic Settings.
+
+For local development, create a `.env` file from the provided example:
+
+```bash
+cp .env.example .env
+```
+
+Available environment variables:
+
+| Variable | Default value | Description |
+|---|---|---|
+| `HELPDESK_APP_NAME` | `Helpdesk API` | Application name displayed in the API documentation |
+| `HELPDESK_APP_VERSION` | `0.1.0` | Current API version |
+| `HELPDESK_ENVIRONMENT` | `development` | Application environment: `development`, `testing`, or `production` |
+| `HELPDESK_DEBUG` | `false` | Enables or disables FastAPI debug mode |
+| `HELPDESK_API_V1_PREFIX` | `/api/v1` | Prefix for version 1 API routes |
+
+The `.env` file is intended for local settings and must not be committed. The `.env.example` file contains safe example values and should remain in version control.
