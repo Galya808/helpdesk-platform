@@ -47,9 +47,9 @@ class User(Base):
             name="user_role",
             values_callable=lambda roles: [role.value for role in roles],
         ),
-        # used by SqlAlchemy
+        # Used by SQLAlchemy
         default=UserRole.CUSTOMER,
-        # used by PostgreSQL
+        # Used by PostgreSQL
         server_default=UserRole.CUSTOMER.value,
     )
 
