@@ -22,7 +22,7 @@ def test_settings_have_expected_defaults(
     assert settings.debug is False
     assert settings.api_v1_prefix == "/api/v1"
     assert settings.database_url == (
-        "postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5432/helpdesk"
+        "postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5433/helpdesk"
     )
 
 

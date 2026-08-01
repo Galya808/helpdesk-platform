@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
     database_url: str = (
-        "postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5432/helpdesk"
+        "postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5433/helpdesk"
     )
 
 
