@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     environment: Literal["development", "testing", "production"] = "development"
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
+    database_url: str = (
+        "postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5432/helpdesk"
+    )
 
 
 @lru_cache
