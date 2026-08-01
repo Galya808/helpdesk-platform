@@ -33,6 +33,24 @@ Run the test suite:
 uv run pytest
 ```
 
+Run tests that do not require external services:
+
+```bash
+uv run pytest -m "not integration"
+```
+
+Database integration tests require the local PostgreSQL service:
+
+```bash
+docker compose up -d db
+```
+
+Run only database integration tests:
+
+```bash
+uv run pytest -m integration
+```
+
 ## Code quality
 
 Check formatting without changing files:
@@ -80,5 +98,8 @@ Available environment variables:
 | `HELPDESK_ENVIRONMENT` | `development` | Application environment: `development`, `testing`, or `production` |
 | `HELPDESK_DEBUG` | `false` | Enables or disables FastAPI debug mode |
 | `HELPDESK_API_V1_PREFIX` | `/api/v1` | Prefix for version 1 API routes |
+| `HELPDESK_DATABASE_URL` | `postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5433/helpdesk` | Asynchronous SQLAlchemy database connection URL |
 
 The `.env` file is intended for local settings and must not be committed. The `.env.example` file contains safe example values and should remain in version control.
+
+Run Docker Compose commands from the repository root.
