@@ -1,34 +1,35 @@
-# helpdesk-platform
-Helpdesk platform built with FastAPI, PostgreSQL and Next.js
+# Helpdesk Platform
+
+Helpdesk platform built with FastAPI, PostgreSQL and Next.js.
 
 ## Local database
 
 Start PostgreSQL:
 
-​```bash
+```bash
 docker compose up -d db
-​```
+```
 
 Check the service status:
 
-​```bash
+```bash
 docker compose ps
-​```
+```
 
 View database logs:
 
-​```bash
+```bash
 docker compose logs db
-​```
+```
 
 Connect with psql:
 
-​```bash
+```bash
 docker compose exec db psql -U helpdesk -d helpdesk
-​```
+```
 
 Stop the services:
 
-​```bash
+```bash
 docker compose down
-​```
+```
