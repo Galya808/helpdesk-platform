@@ -1,8 +1,12 @@
-from app.security.password import hash_password
-from app.users.exceptions import EmailAlreadyRegisteredError
+from app.security.password import hash_password, verify_password
+from app.users.exceptions import (
+    BlockedUserError,
+    EmailAlreadyRegisteredError,
+    InvalidCredentialsError,
+)
 from app.users.model import User
 from app.users.repository import UserRepository
-from app.users.schemas import UserCreate
+from app.users.schemas import UserCreate, UserLogin
 
 
 # This class provides one scenario of the application: register the user
@@ -26,3 +30,23 @@ class RegisterUser:
         )
 
         return created_user
+
+
+class AuthenticateUser:
+    def __init__(self, repo: UserRepository) -> None:
+        self.repo = repo
+
+    async def execute(self, data: UserLogin) -> User:
+        email = str(data.email)
+
+        existing_user = await self.repo.get_by_email(email)
+
+        if existing_user is None or not verify_password(
+            data.password, existing_user.hashed_password
+        ):
+            raise InvalidCredentialsError
+
+        if existing_user.is_blocked:
+            raise BlockedUserError
+
+        return existing_user
