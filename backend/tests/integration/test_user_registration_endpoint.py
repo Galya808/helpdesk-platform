@@ -41,6 +41,7 @@ async def test_user_registration_succeeds() -> None:
             # Assert HTTP Response
             assert response.status_code == status.HTTP_201_CREATED
             assert response_data["role"] == "customer"
+            assert response_data["email"] == email
             assert response_data["id"] is not None
             assert response_data["created_at"] is not None
             assert response_data["updated_at"] is not None
