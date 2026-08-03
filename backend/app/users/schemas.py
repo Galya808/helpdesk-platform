@@ -9,18 +9,6 @@ from app.users.model import UserRole
 Password = Annotated[str, Field(min_length=12, max_length=128)]
 
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: Password
-
-    @field_validator("email", mode="before")
-    @classmethod
-    def normalize_email(cls, value: object) -> object:
-        if isinstance(value, str):
-            return value.strip().lower()
-        return value
-
-
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -30,3 +18,22 @@ class UserRead(BaseModel):
     is_blocked: bool
     created_at: datetime
     updated_at: datetime
+
+
+class NormalizedEmailSchema(BaseModel):
+    email: EmailStr
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+
+class UserCreate(NormalizedEmailSchema):
+    password: Password
+
+
+class UserLogin(NormalizedEmailSchema):
+    password: Password
