@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,14 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str = (
         "postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5433/helpdesk"
+    )
+    jwt_secret_key: SecretStr = SecretStr(
+        "development-only-secret-change-in-production"
+    )
+    jwt_algorithm: Literal["HS256"] = "HS256"
+    access_token_expire_minutes: int = Field(
+        default=30,
+        gt=0,
     )
 
 
