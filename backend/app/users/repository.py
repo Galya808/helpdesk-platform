@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,3 +36,9 @@ class UserRepository:
         await self.session.refresh(user)
 
         return user
+
+    async def get_by_id(self, user_id: UUID) -> User | None:
+        statement = select(User).where(User.id == user_id)
+        result = await self.session.execute(statement)
+
+        return result.scalar_one_or_none()
