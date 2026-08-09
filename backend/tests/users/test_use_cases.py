@@ -1,8 +1,8 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.security.password import hash_password, verify_password
+from app.security.password import dummy_password_hash, hash_password, verify_password
 from app.users.exceptions import (
     BlockedUserError,
     EmailAlreadyRegisteredError,
@@ -124,8 +124,17 @@ async def test_authentication_fails_for_unknown_email() -> None:
     use_case = AuthenticateUser(repo)
 
     # Act
-    with pytest.raises(InvalidCredentialsError):
-        await use_case.execute(user_data)
+    with patch(
+        "app.users.use_cases.verify_password",
+        return_value=False,
+    ) as verify_password_mock:
+        with pytest.raises(InvalidCredentialsError):
+            await use_case.execute(user_data)
+
+        verify_password_mock.assert_called_once_with(
+            user_data.password,
+            dummy_password_hash,
+        )
 
     # Assert
     repo.get_by_email.assert_awaited_once_with(str(user_data.email))

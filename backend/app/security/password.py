@@ -1,6 +1,7 @@
 from pwdlib import PasswordHash
 
 password_hash = PasswordHash.recommended()
+dummy_password_hash = password_hash.hash("dummy-password-used-for-timing-protection")
 
 
 def hash_password(password: str) -> str:
