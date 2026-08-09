@@ -1,4 +1,4 @@
-from app.security.password import hash_password, verify_password
+from app.security.password import dummy_password_hash, hash_password, verify_password
 from app.users.exceptions import (
     BlockedUserError,
     EmailAlreadyRegisteredError,
@@ -41,9 +41,15 @@ class AuthenticateUser:
 
         existing_user = await self.repo.get_by_email(email)
 
-        if existing_user is None or not verify_password(
-            data.password, existing_user.hashed_password
-        ):
+        if existing_user is None:
+            verify_password(
+                data.password,
+                dummy_password_hash,
+            )
+
+            raise InvalidCredentialsError
+
+        if not verify_password(data.password, existing_user.hashed_password):
             raise InvalidCredentialsError
 
         if existing_user.is_blocked:
