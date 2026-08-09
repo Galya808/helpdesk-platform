@@ -1,10 +1,7 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.session import get_database_session
+from app.api.dependencies import DatabaseSession
 from app.users.exceptions import EmailAlreadyRegisteredError
 from app.users.model import User
 from app.users.repository import UserRepository
@@ -15,11 +12,6 @@ router = APIRouter(
     prefix="/users",
     tags=["users"],
 )
-
-DatabaseSession = Annotated[
-    AsyncSession,
-    Depends(get_database_session),
-]
 
 
 @router.post(
