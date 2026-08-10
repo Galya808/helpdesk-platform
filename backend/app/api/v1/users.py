@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 
-from app.api.dependencies import DatabaseSession
+from app.api.dependencies import CurrentUser, DatabaseSession
 from app.users.exceptions import EmailAlreadyRegisteredError
 from app.users.model import User
 from app.users.repository import UserRepository
@@ -35,3 +35,14 @@ async def register(
             status_code=status.HTTP_409_CONFLICT,
             detail="A user with this email already exists",
         ) from error
+
+
+@router.get(
+    "/me",
+    response_model=UserRead,
+    status_code=status.HTTP_200_OK,
+)
+async def read_current_user(
+    current_user: CurrentUser,
+) -> User:
+    return current_user
