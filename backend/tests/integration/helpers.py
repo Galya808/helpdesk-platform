@@ -2,18 +2,20 @@ from sqlalchemy import delete
 
 from app.database.session import async_session_factory
 from app.security.password import hash_password
-from app.users.model import User
+from app.users.model import User, UserRole
 
 
 async def create_test_user(
     email: str,
     password: str,
+    role: UserRole = UserRole.CUSTOMER,
     is_blocked: bool = False,
 ) -> User:
     async with async_session_factory() as session, session.begin():
         user = User(
             email=email,
             hashed_password=hash_password(password),
+            role=role,
             is_blocked=is_blocked,
         )
 
