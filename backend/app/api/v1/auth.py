@@ -1,9 +1,6 @@
-from typing import Annotated
+from fastapi import APIRouter, HTTPException, status
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.database.session import get_database_session
+from app.api.dependencies import DatabaseSession
 from app.security.schemas import AccessTokenResponse
 from app.security.tokens import create_access_token
 from app.users.exceptions import BlockedUserError, InvalidCredentialsError
@@ -15,11 +12,6 @@ router = APIRouter(
     prefix="/auth",
     tags=["authentication"],
 )
-
-DatabaseSession = Annotated[
-    AsyncSession,
-    Depends(get_database_session),
-]
 
 
 @router.post(

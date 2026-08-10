@@ -3,41 +3,10 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
 
-from app.database.session import async_session_factory
 from app.main import app
-from app.security.password import hash_password
 from app.security.tokens import decode_access_token
-from app.users.model import User
-
-
-async def create_test_user(
-    email: str,
-    password: str,
-    is_blocked: bool = False,
-) -> User:
-    async with async_session_factory() as session, session.begin():
-        user = User(
-            email=email, hashed_password=hash_password(password), is_blocked=is_blocked
-        )
-
-        session.add(user)
-
-        # flush executes insert not ending transaction
-        await session.flush()
-        # refresh loads database-generated data (id, timestamps)
-        await session.refresh(user)
-        # session.begin() commits automatically if there is not error, else rollback
-
-        return user
-
-
-async def delete_test_user(
-    email: str,
-) -> None:
-    async with async_session_factory() as session, session.begin():
-        await session.execute(delete(User).where(User.email == email))
+from tests.integration.helpers import create_test_user, delete_test_user
 
 
 @pytest.mark.integration
