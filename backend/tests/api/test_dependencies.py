@@ -88,7 +88,7 @@ async def test_get_current_user_rejects_missing_credentials() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_rejects_invalid_token():
+async def test_get_current_user_rejects_invalid_token() -> None:
     # Arrange
     credentials = HTTPAuthorizationCredentials(
         scheme="Bearer",
@@ -169,7 +169,7 @@ async def test_get_current_user_rejects_missing_user() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_rejects_blocked_token():
+async def test_get_current_user_rejects_blocked_user() -> None:
     user_id = uuid4()
 
     credentials = HTTPAuthorizationCredentials(
