@@ -1,7 +1,10 @@
+from uuid import UUID
+
 from sqlalchemy import delete
 
 from app.database.session import async_session_factory
 from app.security.password import hash_password
+from app.tickets.model import Ticket
 from app.users.model import User, UserRole
 
 
@@ -32,3 +35,10 @@ async def delete_test_user(
 ) -> None:
     async with async_session_factory() as session, session.begin():
         await session.execute(delete(User).where(User.email == email))
+
+
+async def delete_test_ticket(
+    ticket_id: UUID,
+) -> None:
+    async with async_session_factory() as session, session.begin():
+        await session.execute(delete(Ticket).where(Ticket.id == ticket_id))
