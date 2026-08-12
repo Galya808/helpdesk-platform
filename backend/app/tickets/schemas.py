@@ -62,7 +62,7 @@ class TicketPage(BaseModel):
     page_size: int
     total: int
 
-    @computed_field # type: ignore[prop-decorator]
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def pages(self) -> int:
         return (self.total + self.page_size - 1) // self.page_size
