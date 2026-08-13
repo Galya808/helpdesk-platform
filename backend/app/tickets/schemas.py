@@ -2,7 +2,13 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 from app.tickets.model import TicketPriority, TicketStatus
 
@@ -37,3 +43,26 @@ class TicketCreate(BaseModel):
         if isinstance(value, str):
             return value.strip()
         return value
+
+
+class TicketListQuery(BaseModel):
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+    status: TicketStatus | None = None
+    priority: TicketPriority | None = None
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.page_size
+
+
+class TicketPage(BaseModel):
+    items: list[TicketRead]
+    page: int
+    page_size: int
+    total: int
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def pages(self) -> int:
+        return (self.total + self.page_size - 1) // self.page_size

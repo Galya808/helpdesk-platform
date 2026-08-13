@@ -1,7 +1,7 @@
 from app.tickets.exceptions import TicketCreationForbiddenError
 from app.tickets.model import Ticket
 from app.tickets.repository import TicketRepository
-from app.tickets.schemas import TicketCreate
+from app.tickets.schemas import TicketCreate, TicketListQuery, TicketPage, TicketRead
 from app.users.model import User, UserRole
 
 
@@ -25,3 +25,79 @@ class CreateTicket:
         )
 
         return created_ticket
+
+
+class ListTickets:
+    def __init__(self, repository: TicketRepository) -> None:
+        self.repository = repository
+
+    async def execute(
+        self,
+        query: TicketListQuery,
+        current_user: User,
+    ) -> TicketPage:
+        if current_user.role is UserRole.CUSTOMER:
+            tickets = await self.repository.list(
+                customer_id=current_user.id,
+                assignee_id=None,
+                include_unassigned=False,
+                status=query.status,
+                priority=query.priority,
+                offset=query.offset,
+                limit=query.page_size,
+            )
+
+            ticket_count = await self.repository.count(
+                customer_id=current_user.id,
+                assignee_id=None,
+                include_unassigned=False,
+                status=query.status,
+                priority=query.priority,
+            )
+
+        elif current_user.role is UserRole.SUPPORT_AGENT:
+            tickets = await self.repository.list(
+                customer_id=None,
+                assignee_id=current_user.id,
+                include_unassigned=True,
+                status=query.status,
+                priority=query.priority,
+                offset=query.offset,
+                limit=query.page_size,
+            )
+
+            ticket_count = await self.repository.count(
+                customer_id=None,
+                assignee_id=current_user.id,
+                include_unassigned=True,
+                status=query.status,
+                priority=query.priority,
+            )
+
+        elif current_user.role is UserRole.ADMIN:
+            tickets = await self.repository.list(
+                customer_id=None,
+                assignee_id=None,
+                include_unassigned=False,
+                status=query.status,
+                priority=query.priority,
+                offset=query.offset,
+                limit=query.page_size,
+            )
+
+            ticket_count = await self.repository.count(
+                customer_id=None,
+                assignee_id=None,
+                include_unassigned=False,
+                status=query.status,
+                priority=query.priority,
+            )
+
+        ticket_items = [TicketRead.model_validate(ticket) for ticket in tickets]
+
+        return TicketPage(
+            items=ticket_items,
+            page=query.page,
+            page_size=query.page_size,
+            total=ticket_count,
+        )
