@@ -1,13 +1,14 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DatabaseSession
-from app.tickets.exceptions import TicketCreationForbiddenError
+from app.tickets.exceptions import TicketCreationForbiddenError, TicketNotFoundError
 from app.tickets.model import Ticket
 from app.tickets.repository import TicketRepository
 from app.tickets.schemas import TicketCreate, TicketListQuery, TicketPage, TicketRead
-from app.tickets.use_cases import CreateTicket, ListTickets
+from app.tickets.use_cases import CreateTicket, GetTicket, ListTickets
 
 router = APIRouter(
     prefix="/tickets",
@@ -37,6 +38,33 @@ async def list_tickets(
     )
 
     return result
+
+
+@router.get(
+    "/{ticket_id}",
+    response_model=TicketRead,
+)
+async def get_ticket(
+    ticket_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+) -> TicketRead:
+    repository = TicketRepository(session)
+    use_case = GetTicket(repository)
+
+    try:
+        ticket = await use_case.execute(
+            ticket_id=ticket_id,
+            current_user=current_user,
+        )
+
+        return ticket
+
+    except TicketNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        ) from error
 
 
 @router.post(
