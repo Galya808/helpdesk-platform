@@ -580,3 +580,51 @@ async def test_count_returns_filtered_ticket_count() -> None:
         await delete_test_ticket(second_ticket.id)
         await delete_test_ticket(third_ticket.id)
         await delete_test_user(customer.email)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="session")
+async def test_get_by_id_returns_ticket() -> None:
+    # Arrange
+    customer = await create_test_user(
+        email=f"customer-{uuid4()}@example.com",
+        password="strong-password",
+    )
+
+    ticket = await create_test_ticket(
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            # Act
+            repository = TicketRepository(session)
+
+            found_ticket = await repository.get_by_id(ticket.id)
+
+        # Assert
+        assert found_ticket is not None
+        assert ticket.id == found_ticket.id
+        assert ticket.customer_id == found_ticket.customer_id
+        assert ticket.title == found_ticket.title
+
+    finally:
+        await delete_test_ticket(ticket.id)
+        await delete_test_user(customer.email)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="session")
+async def test_get_by_id_returns_none_for_unknown_ticket() -> None:
+    # Arrange
+    unknown_ticket_id = uuid4()
+
+    async with async_session_factory() as session:
+        # Act
+        repository = TicketRepository(session)
+        found_ticket = await repository.get_by_id(unknown_ticket_id)
+
+    # Assert
+    assert found_ticket is None
