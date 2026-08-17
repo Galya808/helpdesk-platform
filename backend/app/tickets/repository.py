@@ -114,8 +114,8 @@ class TicketRepository:
         return result.scalar_one()
 
     async def get_by_id(
-            self,
-            ticket_id: UUID,
+        self,
+        ticket_id: UUID,
     ) -> Ticket | None:
         statement = select(Ticket).where(Ticket.id == ticket_id)
 
