@@ -4,11 +4,11 @@ from uuid import uuid4
 
 import pytest
 
-from app.tickets.exceptions import TicketCreationForbiddenError
+from app.tickets.exceptions import TicketCreationForbiddenError, TicketNotFoundError
 from app.tickets.model import Ticket, TicketPriority, TicketStatus
 from app.tickets.repository import TicketRepository
 from app.tickets.schemas import TicketCreate, TicketListQuery
-from app.tickets.use_cases import CreateTicket, ListTickets
+from app.tickets.use_cases import CreateTicket, GetTicket, ListTickets
 from app.users.model import User, UserRole
 
 
@@ -416,3 +416,310 @@ async def test_list_tickets_passes_filters_and_pagination() -> None:
         status=TicketStatus.OPEN,
         priority=TicketPriority.HIGH,
     )
+
+
+@pytest.mark.asyncio
+async def test_customer_gets_own_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=None,
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id.return_value = ticket
+
+    use_case = GetTicket(repository)
+
+    # Act
+    found_ticket = await use_case.execute(
+        ticket_id=ticket.id,
+        current_user=customer,
+    )
+
+    # Assert
+    assert ticket.id == found_ticket.id
+    assert ticket.customer_id == found_ticket.customer_id
+
+    repository.get_by_id.assert_awaited_once_with(ticket.id)
+
+
+@pytest.mark.asyncio
+async def test_customer_cannot_get_another_customers_ticket() -> None:
+    # Arrange
+    ticket_owner = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    customer = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=ticket_owner.id,
+        assignee_id=None,
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id.return_value = ticket
+
+    use_case = GetTicket(repository)
+
+    # Act + Assert
+    with pytest.raises(TicketNotFoundError):
+        await use_case.execute(ticket.id, customer)
+
+    repository.get_by_id.assert_awaited_once_with(ticket.id)
+
+
+@pytest.mark.asyncio
+async def test_support_agent_gets_unassigned_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    agent = User(
+        id=uuid4(),
+        email=f"agent-{uuid4()}@example.com",
+        hashed_password="hashed_password",
+        role=UserRole.SUPPORT_AGENT,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=None,
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id.return_value = ticket
+
+    use_case = GetTicket(repository)
+
+    # Act
+    found_ticket = await use_case.execute(ticket.id, agent)
+
+    # Assert
+    assert ticket.id == found_ticket.id
+    assert ticket.customer_id == found_ticket.customer_id
+    assert found_ticket.assignee_id is None
+
+    repository.get_by_id.assert_awaited_once_with(ticket.id)
+
+
+@pytest.mark.asyncio
+async def test_support_agent_gets_assigned_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    agent = User(
+        id=uuid4(),
+        email=f"agent-{uuid4()}@example.com",
+        hashed_password="hashed_password",
+        role=UserRole.SUPPORT_AGENT,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=agent.id,
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id.return_value = ticket
+
+    use_case = GetTicket(repository)
+
+    # Act
+    found_ticket = await use_case.execute(ticket.id, agent)
+
+    # Assert
+    assert ticket.id == found_ticket.id
+    assert ticket.customer_id == found_ticket.customer_id
+    assert found_ticket.assignee_id == agent.id
+
+    repository.get_by_id.assert_awaited_once_with(ticket.id)
+
+
+@pytest.mark.asyncio
+async def test_support_agent_cannot_get_another_agents_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    assigned_agent = User(
+        id=uuid4(),
+        email=f"agent-{uuid4()}@example.com",
+        hashed_password="hashed_password",
+        role=UserRole.SUPPORT_AGENT,
+    )
+
+    current_agent = User(
+        id=uuid4(),
+        email=f"agent-{uuid4()}@example.com",
+        hashed_password="hashed_password",
+        role=UserRole.SUPPORT_AGENT,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=assigned_agent.id,
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id.return_value = ticket
+
+    use_case = GetTicket(repository)
+
+    # Act + Assert
+    with pytest.raises(TicketNotFoundError):
+        await use_case.execute(ticket.id, current_agent)
+
+    repository.get_by_id.assert_awaited_once_with(ticket.id)
+
+
+@pytest.mark.asyncio
+async def test_admin_gets_any_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    admin = User(
+        id=uuid4(),
+        email=f"agent-{uuid4()}@example.com",
+        hashed_password="hashed_password",
+        role=UserRole.ADMIN,
+    )
+
+    agent = User(
+        id=uuid4(),
+        email=f"agent-{uuid4()}@example.com",
+        hashed_password="hashed_password",
+        role=UserRole.SUPPORT_AGENT,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=agent.id,
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id.return_value = ticket
+
+    use_case = GetTicket(repository)
+
+    # Act
+    found_ticket = await use_case.execute(ticket.id, admin)
+
+    # Assert
+    assert found_ticket.id == ticket.id
+    assert found_ticket.customer_id == ticket.customer_id
+    assert found_ticket.assignee_id == agent.id
+
+    repository.get_by_id.assert_awaited_once_with(ticket.id)
+
+
+@pytest.mark.asyncio
+async def test_get_ticket_raises_for_unknown_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email=f"customer-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    unknown_ticket_id = uuid4()
+
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id.return_value = None
+
+    use_case = GetTicket(repository)
+
+    # Act + Assert
+    with pytest.raises(TicketNotFoundError):
+        await use_case.execute(unknown_ticket_id, customer)
+
+    repository.get_by_id.assert_awaited_once_with(unknown_ticket_id)

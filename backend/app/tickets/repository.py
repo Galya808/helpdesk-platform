@@ -112,3 +112,13 @@ class TicketRepository:
         result = await self.session.execute(statement)
 
         return result.scalar_one()
+
+    async def get_by_id(
+        self,
+        ticket_id: UUID,
+    ) -> Ticket | None:
+        statement = select(Ticket).where(Ticket.id == ticket_id)
+
+        result = await self.session.execute(statement)
+
+        return result.scalar_one_or_none()
