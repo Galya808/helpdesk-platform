@@ -4,11 +4,22 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DatabaseSession
-from app.tickets.exceptions import TicketCreationForbiddenError, TicketNotFoundError
+from app.tickets.exceptions import (
+    TicketAlreadyAssignedError,
+    TicketAssignmentForbiddenError,
+    TicketCreationForbiddenError,
+    TicketNotAssignableError,
+    TicketNotFoundError,
+)
 from app.tickets.model import Ticket
 from app.tickets.repository import TicketRepository
 from app.tickets.schemas import TicketCreate, TicketListQuery, TicketPage, TicketRead
-from app.tickets.use_cases import CreateTicket, GetTicket, ListTickets
+from app.tickets.use_cases import (
+    AssignTicket,
+    CreateTicket,
+    GetTicket,
+    ListTickets,
+)
 
 router = APIRouter(
     prefix="/tickets",
@@ -95,4 +106,58 @@ async def create_ticket(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only customers can create tickets",
+        ) from error
+
+
+@router.post(
+    "/{ticket_id}/assign", response_model=TicketRead, status_code=status.HTTP_200_OK
+)
+async def assign_ticket(
+    ticket_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+) -> TicketRead:
+    try:
+        repository = TicketRepository(session)
+        use_case = AssignTicket(repository)
+
+        ticket = await use_case.execute(
+            ticket_id=ticket_id,
+            current_user=current_user,
+        )
+
+        await session.commit()
+
+        return ticket
+
+    except TicketAssignmentForbiddenError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only active support agents can assign tickets",
+        ) from error
+
+    except TicketNotFoundError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        ) from error
+
+    except TicketAlreadyAssignedError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ticket is already assigned",
+        ) from error
+
+    except TicketNotAssignableError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ticket cannot be assigned in its current state",
         ) from error
