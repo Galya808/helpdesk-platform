@@ -1,7 +1,13 @@
 from uuid import UUID
 
-from app.tickets.exceptions import TicketCreationForbiddenError, TicketNotFoundError
-from app.tickets.model import Ticket
+from app.tickets.exceptions import (
+    TicketAlreadyAssignedError,
+    TicketAssignmentForbiddenError,
+    TicketCreationForbiddenError,
+    TicketNotAssignableError,
+    TicketNotFoundError,
+)
+from app.tickets.model import Ticket, TicketStatus
 from app.tickets.repository import TicketRepository
 from app.tickets.schemas import TicketCreate, TicketListQuery, TicketPage, TicketRead
 from app.users.model import User, UserRole
@@ -136,3 +142,34 @@ class GetTicket:
             raise TicketNotFoundError
 
         return TicketRead.model_validate(ticket)
+
+
+class AssignTicket:
+    def __init__(self, repository: TicketRepository) -> None:
+        self.repository = repository
+
+    async def execute(
+        self,
+        ticket_id: UUID,
+        current_user: User,
+    ) -> TicketRead:
+        if current_user.role is not UserRole.SUPPORT_AGENT or current_user.is_blocked:
+            raise TicketAssignmentForbiddenError
+
+        ticket = await self.repository.get_by_id_for_update(ticket_id)
+
+        if ticket is None:
+            raise TicketNotFoundError
+
+        if ticket.assignee_id is not None:
+            raise TicketAlreadyAssignedError
+
+        if ticket.status is not TicketStatus.OPEN:
+            raise TicketNotAssignableError
+
+        ticket.assignee_id = current_user.id
+        ticket.status = TicketStatus.IN_PROGRESS
+
+        updated_ticket = await self.repository.save(ticket)
+
+        return TicketRead.model_validate(updated_ticket)

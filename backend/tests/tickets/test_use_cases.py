@@ -4,11 +4,22 @@ from uuid import uuid4
 
 import pytest
 
-from app.tickets.exceptions import TicketCreationForbiddenError, TicketNotFoundError
+from app.tickets.exceptions import (
+    TicketAlreadyAssignedError,
+    TicketAssignmentForbiddenError,
+    TicketCreationForbiddenError,
+    TicketNotAssignableError,
+    TicketNotFoundError,
+)
 from app.tickets.model import Ticket, TicketPriority, TicketStatus
 from app.tickets.repository import TicketRepository
 from app.tickets.schemas import TicketCreate, TicketListQuery
-from app.tickets.use_cases import CreateTicket, GetTicket, ListTickets
+from app.tickets.use_cases import (
+    AssignTicket,
+    CreateTicket,
+    GetTicket,
+    ListTickets,
+)
 from app.users.model import User, UserRole
 
 
@@ -723,3 +734,259 @@ async def test_get_ticket_raises_for_unknown_ticket() -> None:
         await use_case.execute(unknown_ticket_id, customer)
 
     repository.get_by_id.assert_awaited_once_with(unknown_ticket_id)
+
+
+@pytest.mark.asyncio
+async def test_support_agent_assigns_open_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+        is_blocked=False,
+    )
+
+    agent = User(
+        id=uuid4(),
+        email="agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+        is_blocked=False,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = AssignTicket(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+    repository.save.return_value = ticket
+
+    # Act
+    found_ticket = await use_case.execute(ticket.id, agent)
+
+    # Assert
+    assert ticket.id == found_ticket.id
+    assert ticket.customer_id == found_ticket.customer_id
+    assert ticket.assignee_id == agent.id
+    assert ticket.status is TicketStatus.IN_PROGRESS
+    assert found_ticket.assignee_id == agent.id
+    assert found_ticket.status is TicketStatus.IN_PROGRESS
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_awaited_once_with(ticket)
+
+
+@pytest.mark.asyncio
+async def test_customer_cannot_assign_ticket() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+        is_blocked=False,
+    )
+
+    ticket_id = uuid4()
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = AssignTicket(repository)
+
+    # Act + Assert
+    with pytest.raises(TicketAssignmentForbiddenError):
+        await use_case.execute(ticket_id, customer)
+
+    repository.get_by_id_for_update.assert_not_awaited()
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_assign_ticket() -> None:
+    # Arrange
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+        is_blocked=False,
+    )
+
+    ticket_id = uuid4()
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = AssignTicket(repository)
+
+    # Act + Assert
+    with pytest.raises(TicketAssignmentForbiddenError):
+        await use_case.execute(ticket_id, admin)
+
+    repository.get_by_id_for_update.assert_not_awaited()
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blocked_agent_cannot_assign_ticket() -> None:
+    # Arrange
+    agent = User(
+        id=uuid4(),
+        email="agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+        is_blocked=True,
+    )
+
+    ticket_id = uuid4()
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = AssignTicket(repository)
+
+    # Act + Assert
+    with pytest.raises(TicketAssignmentForbiddenError):
+        await use_case.execute(ticket_id, agent)
+
+    repository.get_by_id_for_update.assert_not_awaited()
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_assign_unknown_ticket_raises_not_found() -> None:
+    # Arrange
+    agent = User(
+        id=uuid4(),
+        email="agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+        is_blocked=False,
+    )
+
+    unknown_ticket_id = uuid4()
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = AssignTicket(repository)
+
+    repository.get_by_id_for_update.return_value = None
+
+    # Act + Assert
+    with pytest.raises(TicketNotFoundError):
+        await use_case.execute(unknown_ticket_id, agent)
+
+    repository.get_by_id_for_update.assert_awaited_once_with(unknown_ticket_id)
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_assign_assigned_ticket_raises_conflict() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+        is_blocked=False,
+    )
+
+    assigned_agent = User(
+        id=uuid4(),
+        email="assigned-agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+        is_blocked=False,
+    )
+
+    current_agent = User(
+        id=uuid4(),
+        email="current-agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+        is_blocked=False,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=assigned_agent.id,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = AssignTicket(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+
+    # Act + Assert
+    with pytest.raises(TicketAlreadyAssignedError):
+        await use_case.execute(ticket.id, current_agent)
+
+    repository.get_by_id_for_update.assert_awaited_once_with(
+        ticket.id,
+    )
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_assign_non_open_ticket_raises_conflict() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+        is_blocked=False,
+    )
+
+    agent = User(
+        id=uuid4(),
+        email="current-agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+        is_blocked=False,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.IN_PROGRESS,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = AssignTicket(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+
+    # Act + Assert
+    with pytest.raises(TicketNotAssignableError):
+        await use_case.execute(ticket.id, agent)
+
+    repository.get_by_id_for_update.assert_awaited_once_with(
+        ticket.id,
+    )
+    repository.save.assert_not_awaited()
