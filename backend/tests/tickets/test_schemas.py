@@ -4,7 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from app.tickets.model import TicketPriority, TicketStatus
-from app.tickets.schemas import TicketCreate, TicketListQuery, TicketPage
+from app.tickets.schemas import (
+    TicketCreate,
+    TicketListQuery,
+    TicketPage,
+    TicketStatusUpdate,
+)
 
 
 def test_ticket_with_default_values_succeeds() -> None:
@@ -231,3 +236,34 @@ def test_ticket_page_calculates_pages_with_rounding_up() -> None:
     )
 
     assert page.pages == 3
+
+
+def test_ticket_status_update_is_resolved() -> None:
+    # Arrange + Act
+    ticket = TicketStatusUpdate(
+        status=TicketStatus.RESOLVED,
+    )
+
+    # Assert
+    assert ticket.status is TicketStatus.RESOLVED
+
+
+def test_unknown_ticket_status_raises_validation_error() -> None:
+    # Arrange + Act + Assert
+    with pytest.raises(ValidationError):
+        TicketStatusUpdate.model_validate(
+            {
+                "status": "unknown",
+            }
+        )
+
+
+def test_extra_field_raises_validation_error() -> None:
+    # Arrange + Act + Assert
+    with pytest.raises(ValidationError):
+        TicketStatusUpdate.model_validate(
+            {
+                "status": TicketStatus.RESOLVED,
+                "assignee_id": uuid4(),
+            }
+        )
