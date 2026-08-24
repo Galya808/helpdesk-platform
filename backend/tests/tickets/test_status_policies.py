@@ -8,6 +8,7 @@ from app.tickets.status_policies import (
     AdminTicketStatusPolicy,
     CustomerTicketStatusPolicy,
     SupportAgentTicketStatusPolicy,
+    create_ticket_status_policy,
 )
 from app.users.model import User, UserRole
 
@@ -664,3 +665,22 @@ def test_invalid_statuses_for_admin_returns_no_status(
 
     # Assert
     assert result == set()
+
+
+@pytest.mark.parametrize(
+    ("user_role", "expected_policy_type"),
+    [
+        (UserRole.CUSTOMER, CustomerTicketStatusPolicy),
+        (UserRole.SUPPORT_AGENT, SupportAgentTicketStatusPolicy),
+        (UserRole.ADMIN, AdminTicketStatusPolicy),
+    ],
+)
+def test_user_role_factory_returns_expected_policy_type(
+    user_role: UserRole,
+    expected_policy_type: type[object],
+) -> None:
+    # Act
+    policy = create_ticket_status_policy(user_role)
+
+    # Assert
+    assert isinstance(policy, expected_policy_type)
