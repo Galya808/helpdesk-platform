@@ -1,5 +1,21 @@
+from typing import Protocol
+
 from app.tickets.model import Ticket, TicketStatus
-from app.users.model import User
+from app.users.model import User, UserRole
+
+
+class TicketStatusPolicy(Protocol):
+    def has_access(
+        self,
+        ticket: Ticket,
+        user: User,
+    ) -> bool: ...
+
+    def allowed_statuses(
+        self,
+        ticket: Ticket,
+        user: User,
+    ) -> set[TicketStatus]: ...
 
 
 class CustomerTicketStatusPolicy:
@@ -85,3 +101,18 @@ class AdminTicketStatusPolicy:
             }
 
         return set()
+
+
+def create_ticket_status_policy(
+    role: UserRole,
+) -> TicketStatusPolicy:
+    if role is UserRole.CUSTOMER:
+        return CustomerTicketStatusPolicy()
+
+    if role is UserRole.SUPPORT_AGENT:
+        return SupportAgentTicketStatusPolicy()
+
+    if role is UserRole.ADMIN:
+        return AdminTicketStatusPolicy()
+
+    raise ValueError(f"Unsupported user role: {role}")
