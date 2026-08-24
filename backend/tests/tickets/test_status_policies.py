@@ -1,8 +1,11 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
+
 from app.tickets.model import Ticket, TicketPriority, TicketStatus
 from app.tickets.status_policies import (
+    AdminTicketStatusPolicy,
     CustomerTicketStatusPolicy,
     SupportAgentTicketStatusPolicy,
 )
@@ -490,6 +493,174 @@ def test_closed_for_agent_status_returns_no_status() -> None:
 
     # Act
     result = policy.allowed_statuses(ticket, agent)
+
+    # Assert
+    assert result == set()
+
+
+def test_admin_has_access_to_all_tickets() -> None:
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=None,
+        status=TicketStatus.CLOSED,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    policy = AdminTicketStatusPolicy()
+
+    # Act
+    result = policy.has_access(ticket, admin)
+
+    # Assert
+    assert result is True
+
+
+def test_in_progress_status_for_admin_returns_resolved_status() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=None,
+        status=TicketStatus.IN_PROGRESS,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    policy = AdminTicketStatusPolicy()
+
+    # Act
+    result = policy.allowed_statuses(ticket, admin)
+
+    # Assert
+    assert result == {
+        TicketStatus.RESOLVED,
+    }
+
+
+def test_resolved_status_for_admin_returns_closed_status() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=None,
+        status=TicketStatus.RESOLVED,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    policy = AdminTicketStatusPolicy()
+
+    # Act
+    result = policy.allowed_statuses(ticket, admin)
+
+    # Assert
+    assert result == {
+        TicketStatus.CLOSED,
+    }
+
+
+@pytest.mark.parametrize(
+    "invalid_status",
+    [
+        TicketStatus.OPEN,
+        TicketStatus.CLOSED,
+    ],
+)
+def test_invalid_statuses_for_admin_returns_no_status(
+    invalid_status: TicketStatus,
+) -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        customer_id=customer.id,
+        assignee_id=None,
+        status=invalid_status,
+        priority=TicketPriority.MEDIUM,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    policy = AdminTicketStatusPolicy()
+
+    # Act
+    result = policy.allowed_statuses(ticket, admin)
 
     # Assert
     assert result == set()
