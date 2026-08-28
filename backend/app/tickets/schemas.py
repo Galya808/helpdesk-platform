@@ -66,3 +66,9 @@ class TicketPage(BaseModel):
     @property
     def pages(self) -> int:
         return (self.total + self.page_size - 1) // self.page_size
+
+
+class TicketStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: TicketStatus

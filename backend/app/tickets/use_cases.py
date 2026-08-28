@@ -1,15 +1,24 @@
 from uuid import UUID
 
 from app.tickets.exceptions import (
+    InvalidTicketStatusTransitionError,
     TicketAlreadyAssignedError,
     TicketAssignmentForbiddenError,
     TicketCreationForbiddenError,
     TicketNotAssignableError,
     TicketNotFoundError,
+    TicketStatusChangeForbiddenError,
 )
 from app.tickets.model import Ticket, TicketStatus
 from app.tickets.repository import TicketRepository
-from app.tickets.schemas import TicketCreate, TicketListQuery, TicketPage, TicketRead
+from app.tickets.schemas import (
+    TicketCreate,
+    TicketListQuery,
+    TicketPage,
+    TicketRead,
+    TicketStatusUpdate,
+)
+from app.tickets.status_policies import create_ticket_status_policy
 from app.users.model import User, UserRole
 
 
@@ -169,6 +178,46 @@ class AssignTicket:
 
         ticket.assignee_id = current_user.id
         ticket.status = TicketStatus.IN_PROGRESS
+
+        updated_ticket = await self.repository.save(ticket)
+
+        return TicketRead.model_validate(updated_ticket)
+
+
+class ChangeTicketStatus:
+    def __init__(self, repository: TicketRepository) -> None:
+        self.repository = repository
+
+    async def execute(
+        self,
+        ticket_id: UUID,
+        data: TicketStatusUpdate,
+        current_user: User,
+    ) -> TicketRead:
+        if current_user.is_blocked:
+            raise TicketStatusChangeForbiddenError
+
+        ticket = await self.repository.get_by_id_for_update(ticket_id)
+
+        if ticket is None:
+            raise TicketNotFoundError
+
+        policy = create_ticket_status_policy(current_user.role)
+
+        has_access = policy.has_access(ticket, current_user)
+
+        if not has_access:
+            raise TicketStatusChangeForbiddenError
+
+        allowed_statuses = policy.allowed_statuses(
+            ticket=ticket,
+            user=current_user,
+        )
+
+        if data.status not in allowed_statuses:
+            raise InvalidTicketStatusTransitionError
+
+        ticket.status = data.status
 
         updated_ticket = await self.repository.save(ticket)
 

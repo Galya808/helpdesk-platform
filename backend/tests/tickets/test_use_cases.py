@@ -5,17 +5,20 @@ from uuid import uuid4
 import pytest
 
 from app.tickets.exceptions import (
+    InvalidTicketStatusTransitionError,
     TicketAlreadyAssignedError,
     TicketAssignmentForbiddenError,
     TicketCreationForbiddenError,
     TicketNotAssignableError,
     TicketNotFoundError,
+    TicketStatusChangeForbiddenError,
 )
 from app.tickets.model import Ticket, TicketPriority, TicketStatus
 from app.tickets.repository import TicketRepository
-from app.tickets.schemas import TicketCreate, TicketListQuery
+from app.tickets.schemas import TicketCreate, TicketListQuery, TicketStatusUpdate
 from app.tickets.use_cases import (
     AssignTicket,
+    ChangeTicketStatus,
     CreateTicket,
     GetTicket,
     ListTickets,
@@ -990,3 +993,338 @@ async def test_assign_non_open_ticket_raises_conflict() -> None:
         ticket.id,
     )
     repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_customer_changes_ticket_status_from_open_to_closed() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    data = TicketStatusUpdate(
+        status=TicketStatus.CLOSED,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketStatus(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+    repository.save.return_value = ticket
+
+    # Act
+    result = await use_case.execute(
+        ticket_id=ticket.id,
+        data=data,
+        current_user=customer,
+    )
+
+    # Assert
+    assert ticket.status is TicketStatus.CLOSED
+    assert result.status is TicketStatus.CLOSED
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_awaited_once_with(ticket)
+
+
+@pytest.mark.asyncio
+async def test_non_existing_ticket_raises_ticket_not_found_error() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    data = TicketStatusUpdate(
+        status=TicketStatus.CLOSED,
+    )
+
+    ticket_id = uuid4()
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketStatus(repository)
+
+    repository.get_by_id_for_update.return_value = None
+
+    # Act + Assert
+    with pytest.raises(TicketNotFoundError):
+        await use_case.execute(
+            ticket_id=ticket_id,
+            data=data,
+            current_user=customer,
+        )
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket_id)
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_customer_cannot_change_another_customers_ticket_status() -> None:
+    # Arrange
+    owner = User(
+        id=uuid4(),
+        email="owner@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        customer_id=owner.id,
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    data = TicketStatusUpdate(
+        status=TicketStatus.CLOSED,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketStatus(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+
+    # Act + Assert
+    with pytest.raises(TicketStatusChangeForbiddenError):
+        await use_case.execute(
+            ticket_id=ticket.id,
+            data=data,
+            current_user=customer,
+        )
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_customer_cannot_transition_open_ticket_to_resolved() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    data = TicketStatusUpdate(
+        status=TicketStatus.RESOLVED,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketStatus(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+
+    # Act + Assert
+    with pytest.raises(InvalidTicketStatusTransitionError):
+        await use_case.execute(
+            ticket_id=ticket.id,
+            data=data,
+            current_user=customer,
+        )
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blocked_user_cannot_change_ticket_status() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+        is_blocked=True,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    ticket_status_data = TicketStatusUpdate(
+        status=TicketStatus.CLOSED,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketStatus(repository)
+
+    # Act + Assert
+    with pytest.raises(TicketStatusChangeForbiddenError):
+        await use_case.execute(
+            ticket_id=ticket.id,
+            data=ticket_status_data,
+            current_user=customer,
+        )
+
+    repository.get_by_id_for_update.assert_not_awaited()
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_assigned_agent_changes_ticket_from_in_progress_to_resolved() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    agent = User(
+        id=uuid4(),
+        email="agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.IN_PROGRESS,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=agent.id,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    ticket_status_data = TicketStatusUpdate(
+        status=TicketStatus.RESOLVED,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketStatus(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+    repository.save.return_value = ticket
+
+    # Act
+    updated_ticket = await use_case.execute(
+        ticket_id=ticket.id,
+        data=ticket_status_data,
+        current_user=agent,
+    )
+
+    # Assert
+    assert updated_ticket.status is TicketStatus.RESOLVED
+    assert ticket.status is TicketStatus.RESOLVED
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_awaited_once_with(ticket)
+
+
+@pytest.mark.asyncio
+async def test_admin_changes_ticket_from_resolved_to_closed() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.RESOLVED,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    ticket_status_data = TicketStatusUpdate(
+        status=TicketStatus.CLOSED,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketStatus(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+    repository.save.return_value = ticket
+
+    # Act
+    updated_ticket = await use_case.execute(
+        ticket_id=ticket.id,
+        data=ticket_status_data,
+        current_user=admin,
+    )
+
+    # Assert
+    assert updated_ticket.status is TicketStatus.CLOSED
+    assert ticket.status is TicketStatus.CLOSED
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_awaited_once_with(ticket)

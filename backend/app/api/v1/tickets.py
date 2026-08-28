@@ -5,17 +5,26 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DatabaseSession
 from app.tickets.exceptions import (
+    InvalidTicketStatusTransitionError,
     TicketAlreadyAssignedError,
     TicketAssignmentForbiddenError,
     TicketCreationForbiddenError,
     TicketNotAssignableError,
     TicketNotFoundError,
+    TicketStatusChangeForbiddenError,
 )
 from app.tickets.model import Ticket
 from app.tickets.repository import TicketRepository
-from app.tickets.schemas import TicketCreate, TicketListQuery, TicketPage, TicketRead
+from app.tickets.schemas import (
+    TicketCreate,
+    TicketListQuery,
+    TicketPage,
+    TicketRead,
+    TicketStatusUpdate,
+)
 from app.tickets.use_cases import (
     AssignTicket,
+    ChangeTicketStatus,
     CreateTicket,
     GetTicket,
     ListTickets,
@@ -160,4 +169,54 @@ async def assign_ticket(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Ticket cannot be assigned in its current state",
+        ) from error
+
+
+@router.patch(
+    "/{ticket_id}/status",
+    response_model=TicketRead,
+    status_code=status.HTTP_200_OK,
+)
+async def update_ticket_status(
+    ticket_id: UUID,
+    data: TicketStatusUpdate,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+) -> TicketRead:
+    repository = TicketRepository(session)
+    use_case = ChangeTicketStatus(repository)
+
+    try:
+        updated_ticket = await use_case.execute(
+            ticket_id=ticket_id,
+            data=data,
+            current_user=current_user,
+        )
+
+        await session.commit()
+
+        return updated_ticket
+
+    except TicketNotFoundError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        ) from error
+
+    except TicketStatusChangeForbiddenError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ticket status change is forbidden",
+        ) from error
+
+    except InvalidTicketStatusTransitionError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Invalid ticket status transition",
         ) from error
