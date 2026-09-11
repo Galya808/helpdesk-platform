@@ -6,12 +6,13 @@ import pytest
 
 from app.comments.exceptions import (
     CommentCreationForbiddenError,
+    CommentViewingForbiddenError,
     TicketClosedForCommentsError,
 )
 from app.comments.model import TicketComment
 from app.comments.repository import TicketCommentRepository
-from app.comments.schemas import CommentCreate
-from app.comments.use_cases import AddTicketComment
+from app.comments.schemas import CommentCreate, CommentListQuery
+from app.comments.use_cases import AddTicketComment, ListTicketComments
 from app.tickets.exceptions import TicketNotFoundError
 from app.tickets.model import Ticket, TicketPriority, TicketStatus
 from app.tickets.repository import TicketRepository
@@ -274,3 +275,241 @@ async def test_blocked_user_cannot_add_comment() -> None:
 
     ticket_repository.get_by_id.assert_not_awaited()
     comment_repository.create.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "role",
+    [
+        UserRole.CUSTOMER,
+        UserRole.SUPPORT_AGENT,
+        UserRole.ADMIN,
+    ],
+    ids=["customer", "assigned-agent", "admin"],
+)
+@pytest.mark.asyncio
+async def test_authorized_user_gets_comments_and_pagination(
+    role: UserRole,
+) -> None:
+    # Arrange
+    user = make_user(role)
+
+    customer_id = user.id if role is UserRole.CUSTOMER else uuid4()
+
+    assignee_id = user.id if role is UserRole.SUPPORT_AGENT else None
+
+    ticket_status = (
+        TicketStatus.IN_PROGRESS
+        if role is UserRole.SUPPORT_AGENT
+        else TicketStatus.OPEN
+    )
+
+    ticket = make_ticket(
+        customer_id=customer_id,
+        assignee_id=assignee_id,
+        status=ticket_status,
+    )
+
+    data = CommentCreate(
+        content="test-comment",
+    )
+
+    first_comment = make_comment(
+        ticket_id=ticket.id,
+        author_id=customer_id,
+        content=data.content,
+    )
+
+    second_comment = make_comment(
+        ticket_id=ticket.id,
+        author_id=customer_id,
+        content=data.content,
+    )
+
+    comment_repository = AsyncMock(spec=TicketCommentRepository)
+    ticket_repository = AsyncMock(spec=TicketRepository)
+
+    ticket_repository.get_by_id.return_value = ticket
+    comment_repository.list_by_ticket.return_value = [first_comment, second_comment]
+    comment_repository.count_by_ticket.return_value = 22
+
+    use_case = ListTicketComments(
+        ticket_repository=ticket_repository,
+        comment_repository=comment_repository,
+    )
+
+    query = CommentListQuery(page=3, page_size=10)
+
+    # Act
+    result = await use_case.execute(
+        ticket_id=ticket.id,
+        query=query,
+        current_user=user,
+    )
+
+    # Assert
+    assert result.page == 3
+    assert result.page_size == 10
+    assert result.total == 22
+    assert result.pages == 3
+    assert len(result.items) == 2
+    assert [item.id for item in result.items] == [
+        first_comment.id,
+        second_comment.id,
+    ]
+
+    ticket_repository.get_by_id.assert_awaited_once_with(
+        ticket_id=ticket.id,
+    )
+
+    comment_repository.list_by_ticket.assert_awaited_once_with(
+        ticket_id=ticket.id,
+        offset=20,
+        limit=10,
+    )
+
+    comment_repository.count_by_ticket.assert_awaited_once_with(
+        ticket_id=ticket.id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_customer_gets_comments_from_closed_ticket() -> None:
+    # Arrange
+    customer = make_user(UserRole.CUSTOMER)
+    ticket = make_ticket(
+        customer_id=customer.id,
+        status=TicketStatus.CLOSED,
+    )
+    expected_comment = make_comment(
+        ticket_id=ticket.id,
+        author_id=customer.id,
+        content="test-comment",
+    )
+    query = CommentListQuery()
+
+    ticket_repository = AsyncMock(spec=TicketRepository)
+    comment_repository = AsyncMock(spec=TicketCommentRepository)
+    ticket_repository.get_by_id.return_value = ticket
+    comment_repository.list_by_ticket.return_value = [expected_comment]
+    comment_repository.count_by_ticket.return_value = 1
+    use_case = ListTicketComments(ticket_repository, comment_repository)
+
+    # Act
+    result = await use_case.execute(
+        ticket_id=ticket.id,
+        query=query,
+        current_user=customer,
+    )
+
+    # Assert
+    assert result.total == 1
+    assert len(result.items) == 1
+    assert result.items[0].id == expected_comment.id
+    ticket_repository.get_by_id.assert_awaited_once_with(ticket_id=ticket.id)
+    comment_repository.list_by_ticket.assert_awaited_once_with(
+        ticket_id=ticket.id,
+        offset=0,
+        limit=20,
+    )
+    comment_repository.count_by_ticket.assert_awaited_once_with(
+        ticket_id=ticket.id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_customer_cannot_view_another_customers_ticket_comments() -> None:
+    # Arrange
+    customer = make_user(UserRole.CUSTOMER)
+    ticket = make_ticket(customer_id=uuid4())
+    query = CommentListQuery()
+
+    ticket_repository = AsyncMock(spec=TicketRepository)
+    comment_repository = AsyncMock(spec=TicketCommentRepository)
+    ticket_repository.get_by_id.return_value = ticket
+    use_case = ListTicketComments(ticket_repository, comment_repository)
+
+    # Act + Assert
+    with pytest.raises(CommentViewingForbiddenError):
+        await use_case.execute(
+            ticket_id=ticket.id,
+            query=query,
+            current_user=customer,
+        )
+
+    ticket_repository.get_by_id.assert_awaited_once_with(ticket_id=ticket.id)
+    comment_repository.list_by_ticket.assert_not_awaited()
+    comment_repository.count_by_ticket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unassigned_agent_cannot_view_ticket_comments() -> None:
+    # Arrange
+    agent = make_user(UserRole.SUPPORT_AGENT)
+    ticket = make_ticket(customer_id=uuid4(), assignee_id=None)
+    query = CommentListQuery()
+
+    ticket_repository = AsyncMock(spec=TicketRepository)
+    comment_repository = AsyncMock(spec=TicketCommentRepository)
+    ticket_repository.get_by_id.return_value = ticket
+    use_case = ListTicketComments(ticket_repository, comment_repository)
+
+    # Act + Assert
+    with pytest.raises(CommentViewingForbiddenError):
+        await use_case.execute(
+            ticket_id=ticket.id,
+            query=query,
+            current_user=agent,
+        )
+
+    ticket_repository.get_by_id.assert_awaited_once_with(ticket_id=ticket.id)
+    comment_repository.list_by_ticket.assert_not_awaited()
+    comment_repository.count_by_ticket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unknown_ticket_comments_cannot_be_viewed() -> None:
+    # Arrange
+    customer = make_user(UserRole.CUSTOMER)
+    ticket_id = uuid4()
+    query = CommentListQuery()
+
+    ticket_repository = AsyncMock(spec=TicketRepository)
+    comment_repository = AsyncMock(spec=TicketCommentRepository)
+    ticket_repository.get_by_id.return_value = None
+    use_case = ListTicketComments(ticket_repository, comment_repository)
+
+    # Act + Assert
+    with pytest.raises(TicketNotFoundError):
+        await use_case.execute(
+            ticket_id=ticket_id,
+            query=query,
+            current_user=customer,
+        )
+
+    ticket_repository.get_by_id.assert_awaited_once_with(ticket_id=ticket_id)
+    comment_repository.list_by_ticket.assert_not_awaited()
+    comment_repository.count_by_ticket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blocked_user_cannot_view_ticket_comments() -> None:
+    # Arrange
+    customer = make_user(UserRole.CUSTOMER, is_blocked=True)
+    ticket_id = uuid4()
+    query = CommentListQuery()
+
+    ticket_repository = AsyncMock(spec=TicketRepository)
+    comment_repository = AsyncMock(spec=TicketCommentRepository)
+    use_case = ListTicketComments(ticket_repository, comment_repository)
+
+    # Act + Assert
+    with pytest.raises(CommentViewingForbiddenError):
+        await use_case.execute(
+            ticket_id=ticket_id,
+            query=query,
+            current_user=customer,
+        )
+
+    ticket_repository.get_by_id.assert_not_awaited()
+    comment_repository.list_by_ticket.assert_not_awaited()
+    comment_repository.count_by_ticket.assert_not_awaited()
