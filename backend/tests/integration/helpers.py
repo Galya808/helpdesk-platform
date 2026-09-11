@@ -2,6 +2,7 @@ from uuid import UUID
 
 from sqlalchemy import delete
 
+from app.comments.model import TicketComment
 from app.database.session import async_session_factory
 from app.security.password import hash_password
 from app.tickets.model import Ticket, TicketPriority, TicketStatus
@@ -68,3 +69,33 @@ async def delete_test_ticket(
 ) -> None:
     async with async_session_factory() as session, session.begin():
         await session.execute(delete(Ticket).where(Ticket.id == ticket_id))
+
+
+async def create_test_comment(
+    *,
+    ticket_id: UUID,
+    author_id: UUID,
+    content: str,
+) -> TicketComment:
+    async with async_session_factory() as session, session.begin():
+        comment = TicketComment(
+            ticket_id=ticket_id,
+            author_id=author_id,
+            content=content,
+        )
+
+        session.add(comment)
+
+        await session.flush()
+        await session.refresh(comment)
+
+        return comment
+
+
+async def delete_test_comment(
+    comment_id: UUID,
+) -> None:
+    async with async_session_factory() as session, session.begin():
+        await session.execute(
+            delete(TicketComment).where(TicketComment.id == comment_id)
+        )
