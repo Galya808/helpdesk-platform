@@ -71,6 +71,27 @@ async def delete_test_ticket(
         await session.execute(delete(Ticket).where(Ticket.id == ticket_id))
 
 
+async def create_test_comment(
+    *,
+    ticket_id: UUID,
+    author_id: UUID,
+    content: str,
+) -> TicketComment:
+    async with async_session_factory() as session, session.begin():
+        comment = TicketComment(
+            ticket_id=ticket_id,
+            author_id=author_id,
+            content=content,
+        )
+
+        session.add(comment)
+
+        await session.flush()
+        await session.refresh(comment)
+
+        return comment
+
+
 async def delete_test_comment(
     comment_id: UUID,
 ) -> None:
