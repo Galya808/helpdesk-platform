@@ -4,3 +4,7 @@ class CommentCreationForbiddenError(Exception):
 
 class TicketClosedForCommentsError(Exception):
     """Raised when comments cannot be added to a closed ticket."""
+
+
+class CommentViewingForbiddenError(Exception):
+    """Raised when viewing ticket comments is forbidden."""
