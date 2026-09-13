@@ -1,23 +1,31 @@
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from app.tickets.exceptions import (
+    ClosedTicketPriorityChangeError,
     InvalidTicketStatusTransitionError,
     TicketAlreadyAssignedError,
     TicketAssignmentForbiddenError,
     TicketCreationForbiddenError,
     TicketNotAssignableError,
     TicketNotFoundError,
+    TicketPriorityChangeForbiddenError,
     TicketStatusChangeForbiddenError,
 )
 from app.tickets.model import Ticket, TicketPriority, TicketStatus
 from app.tickets.repository import TicketRepository
-from app.tickets.schemas import TicketCreate, TicketListQuery, TicketStatusUpdate
+from app.tickets.schemas import (
+    TicketCreate,
+    TicketListQuery,
+    TicketPriorityUpdate,
+    TicketStatusUpdate,
+)
 from app.tickets.use_cases import (
     AssignTicket,
+    ChangeTicketPriority,
     ChangeTicketStatus,
     CreateTicket,
     GetTicket,
@@ -1326,5 +1334,266 @@ async def test_admin_changes_ticket_from_resolved_to_closed() -> None:
     assert updated_ticket.status is TicketStatus.CLOSED
     assert ticket.status is TicketStatus.CLOSED
 
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_awaited_once_with(ticket)
+
+
+@pytest.mark.asyncio
+async def test_assigned_agent_changes_ticket_priority() -> None:
+    # Arrange
+    customer = User(
+        id=uuid4(),
+        email="customer@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.CUSTOMER,
+    )
+
+    agent = User(
+        id=uuid4(),
+        email="agent@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.SUPPORT_AGENT,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.IN_PROGRESS,
+        priority=TicketPriority.MEDIUM,
+        customer_id=customer.id,
+        assignee_id=agent.id,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    ticket_priority_data = TicketPriorityUpdate(
+        priority=TicketPriority.HIGH,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketPriority(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+    repository.save.return_value = ticket
+
+    # Act
+    updated_ticket = await use_case.execute(
+        ticket_id=ticket.id,
+        data=ticket_priority_data,
+        current_user=agent,
+    )
+
+    # Assert
+    assert updated_ticket.priority is TicketPriority.HIGH
+    assert ticket.priority is TicketPriority.HIGH
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_awaited_once_with(ticket)
+
+
+@pytest.mark.asyncio
+async def test_admin_changes_ticket_priority() -> None:
+    # Arrange
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+
+    created_at = datetime.now(UTC)
+
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.IN_PROGRESS,
+        priority=TicketPriority.MEDIUM,
+        customer_id=uuid4(),
+        assignee_id=None,
+        created_at=created_at,
+        updated_at=created_at,
+    )
+
+    ticket_priority_data = TicketPriorityUpdate(
+        priority=TicketPriority.HIGH,
+    )
+
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketPriority(repository)
+
+    repository.get_by_id_for_update.return_value = ticket
+    repository.save.return_value = ticket
+
+    # Act
+    updated_ticket = await use_case.execute(
+        ticket_id=ticket.id,
+        data=ticket_priority_data,
+        current_user=admin,
+    )
+
+    # Assert
+    assert updated_ticket.priority is TicketPriority.HIGH
+    assert ticket.priority is TicketPriority.HIGH
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_awaited_once_with(ticket)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("assignee_id", "actor_role"),
+    [
+        (None, UserRole.SUPPORT_AGENT),
+        (uuid4(), UserRole.SUPPORT_AGENT),
+        (None, UserRole.CUSTOMER),
+    ],
+)
+async def test_unauthorized_user_cannot_change_ticket_priority(
+    assignee_id: UUID | None,
+    actor_role: UserRole,
+) -> None:
+    actor = User(
+        id=uuid4(),
+        email=f"actor-{uuid4()}@example.com",
+        hashed_password="hashed-password",
+        role=actor_role,
+    )
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.MEDIUM,
+        customer_id=actor.id,
+        assignee_id=assignee_id,
+    )
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id_for_update.return_value = ticket
+    use_case = ChangeTicketPriority(repository)
+
+    with pytest.raises(TicketPriorityChangeForbiddenError):
+        await use_case.execute(
+            ticket_id=ticket.id,
+            data=TicketPriorityUpdate(priority=TicketPriority.HIGH),
+            current_user=actor,
+        )
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blocked_user_cannot_change_ticket_priority() -> None:
+    blocked_admin = User(
+        id=uuid4(),
+        email="blocked-admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+        is_blocked=True,
+    )
+    repository = AsyncMock(spec=TicketRepository)
+    use_case = ChangeTicketPriority(repository)
+
+    with pytest.raises(TicketPriorityChangeForbiddenError):
+        await use_case.execute(
+            ticket_id=uuid4(),
+            data=TicketPriorityUpdate(priority=TicketPriority.HIGH),
+            current_user=blocked_admin,
+        )
+
+    repository.get_by_id_for_update.assert_not_awaited()
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_closed_ticket_priority_cannot_be_changed() -> None:
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.CLOSED,
+        priority=TicketPriority.MEDIUM,
+        customer_id=uuid4(),
+    )
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id_for_update.return_value = ticket
+    use_case = ChangeTicketPriority(repository)
+
+    with pytest.raises(ClosedTicketPriorityChangeError):
+        await use_case.execute(
+            ticket_id=ticket.id,
+            data=TicketPriorityUpdate(priority=TicketPriority.HIGH),
+            current_user=admin,
+        )
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_missing_ticket_priority_change_raises_not_found() -> None:
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+    ticket_id = uuid4()
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id_for_update.return_value = None
+    use_case = ChangeTicketPriority(repository)
+
+    with pytest.raises(TicketNotFoundError):
+        await use_case.execute(
+            ticket_id=ticket_id,
+            data=TicketPriorityUpdate(priority=TicketPriority.HIGH),
+            current_user=admin,
+        )
+
+    repository.get_by_id_for_update.assert_awaited_once_with(ticket_id)
+    repository.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_same_ticket_priority_is_allowed() -> None:
+    created_at = datetime.now(UTC)
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+    ticket = Ticket(
+        id=uuid4(),
+        title="test-title",
+        description="test-description",
+        status=TicketStatus.OPEN,
+        priority=TicketPriority.HIGH,
+        customer_id=uuid4(),
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    repository = AsyncMock(spec=TicketRepository)
+    repository.get_by_id_for_update.return_value = ticket
+    repository.save.return_value = ticket
+    use_case = ChangeTicketPriority(repository)
+
+    updated_ticket = await use_case.execute(
+        ticket_id=ticket.id,
+        data=TicketPriorityUpdate(priority=TicketPriority.HIGH),
+        current_user=admin,
+    )
+
+    assert updated_ticket.priority is TicketPriority.HIGH
     repository.get_by_id_for_update.assert_awaited_once_with(ticket.id)
     repository.save.assert_awaited_once_with(ticket)
