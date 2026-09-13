@@ -8,6 +8,7 @@ from app.tickets.schemas import (
     TicketCreate,
     TicketListQuery,
     TicketPage,
+    TicketPriorityUpdate,
     TicketStatusUpdate,
 )
 
@@ -258,12 +259,43 @@ def test_unknown_ticket_status_raises_validation_error() -> None:
         )
 
 
-def test_extra_field_raises_validation_error() -> None:
+def test_extra_ticket_status_field_raises_validation_error() -> None:
     # Arrange + Act + Assert
     with pytest.raises(ValidationError):
         TicketStatusUpdate.model_validate(
             {
                 "status": TicketStatus.RESOLVED,
+                "assignee_id": uuid4(),
+            }
+        )
+
+
+def test_ticket_priority_update_is_valid() -> None:
+    # Arrange + Act
+    ticket = TicketPriorityUpdate(
+        priority=TicketPriority.HIGH,
+    )
+
+    # Assert
+    assert ticket.priority is TicketPriority.HIGH
+
+
+def test_unknown_ticket_priority_raises_validation_error() -> None:
+    # Arrange + Act + Assert
+    with pytest.raises(ValidationError):
+        TicketPriorityUpdate.model_validate(
+            {
+                "priority": "critical",
+            }
+        )
+
+
+def test_extra_ticket_priority_field_raises_validation_error() -> None:
+    # Arrange + Act + Assert
+    with pytest.raises(ValidationError):
+        TicketPriorityUpdate.model_validate(
+            {
+                "priority": TicketPriority.HIGH,
                 "assignee_id": uuid4(),
             }
         )
