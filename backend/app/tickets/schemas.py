@@ -72,3 +72,9 @@ class TicketStatusUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: TicketStatus
+
+
+class TicketPriorityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    priority: TicketPriority
