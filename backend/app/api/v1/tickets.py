@@ -5,12 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DatabaseSession
 from app.tickets.exceptions import (
+    ClosedTicketPriorityChangeError,
     InvalidTicketStatusTransitionError,
     TicketAlreadyAssignedError,
     TicketAssignmentForbiddenError,
     TicketCreationForbiddenError,
     TicketNotAssignableError,
     TicketNotFoundError,
+    TicketPriorityChangeForbiddenError,
     TicketStatusChangeForbiddenError,
 )
 from app.tickets.model import Ticket
@@ -19,11 +21,13 @@ from app.tickets.schemas import (
     TicketCreate,
     TicketListQuery,
     TicketPage,
+    TicketPriorityUpdate,
     TicketRead,
     TicketStatusUpdate,
 )
 from app.tickets.use_cases import (
     AssignTicket,
+    ChangeTicketPriority,
     ChangeTicketStatus,
     CreateTicket,
     GetTicket,
@@ -219,4 +223,54 @@ async def update_ticket_status(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Invalid ticket status transition",
+        ) from error
+
+
+@router.patch(
+    "/{ticket_id}/priority",
+    response_model=TicketRead,
+    status_code=status.HTTP_200_OK,
+)
+async def update_ticket_priority(
+    ticket_id: UUID,
+    data: TicketPriorityUpdate,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+) -> TicketRead:
+    repository = TicketRepository(session)
+    use_case = ChangeTicketPriority(repository)
+
+    try:
+        updated_ticket = await use_case.execute(
+            ticket_id=ticket_id,
+            data=data,
+            current_user=current_user,
+        )
+
+        await session.commit()
+
+        return updated_ticket
+
+    except TicketNotFoundError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        ) from error
+
+    except TicketPriorityChangeForbiddenError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ticket priority change is forbidden",
+        ) from error
+
+    except ClosedTicketPriorityChangeError as error:
+        await session.rollback()
+
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Closed ticket priority cannot be changed",
         ) from error
