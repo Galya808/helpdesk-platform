@@ -24,3 +24,11 @@ class TicketStatusChangeForbiddenError(Exception):
 
 class InvalidTicketStatusTransitionError(Exception):
     """Raised when a transition is not possible."""
+
+
+class TicketPriorityChangeForbiddenError(Exception):
+    """Raised when a user cannot change ticket priority."""
+
+
+class ClosedTicketPriorityChangeError(Exception):
+    """Raised when priority cannot be changed for a closed ticket."""

@@ -1,12 +1,14 @@
 from uuid import UUID
 
 from app.tickets.exceptions import (
+    ClosedTicketPriorityChangeError,
     InvalidTicketStatusTransitionError,
     TicketAlreadyAssignedError,
     TicketAssignmentForbiddenError,
     TicketCreationForbiddenError,
     TicketNotAssignableError,
     TicketNotFoundError,
+    TicketPriorityChangeForbiddenError,
     TicketStatusChangeForbiddenError,
 )
 from app.tickets.model import Ticket, TicketStatus
@@ -15,6 +17,7 @@ from app.tickets.schemas import (
     TicketCreate,
     TicketListQuery,
     TicketPage,
+    TicketPriorityUpdate,
     TicketRead,
     TicketStatusUpdate,
 )
@@ -222,3 +225,41 @@ class ChangeTicketStatus:
         updated_ticket = await self.repository.save(ticket)
 
         return TicketRead.model_validate(updated_ticket)
+
+
+class ChangeTicketPriority:
+    def __init__(self, repository: TicketRepository) -> None:
+        self.repository = repository
+
+    async def execute(
+        self,
+        *,
+        ticket_id: UUID,
+        data: TicketPriorityUpdate,
+        current_user: User,
+    ) -> TicketRead:
+        if current_user.is_blocked:
+            raise TicketPriorityChangeForbiddenError
+
+        ticket = await self.repository.get_by_id_for_update(ticket_id)
+
+        if ticket is None:
+            raise TicketNotFoundError
+
+        if current_user.role is UserRole.CUSTOMER:
+            raise TicketPriorityChangeForbiddenError
+
+        if (
+            current_user.role is UserRole.SUPPORT_AGENT
+            and ticket.assignee_id != current_user.id
+        ):
+            raise TicketPriorityChangeForbiddenError
+
+        if ticket.status is TicketStatus.CLOSED:
+            raise ClosedTicketPriorityChangeError
+
+        ticket.priority = data.priority
+
+        saved_ticket = await self.repository.save(ticket)
+
+        return TicketRead.model_validate(saved_ticket)
