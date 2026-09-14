@@ -13,6 +13,21 @@ def test_settings_have_expected_defaults(
     # Arrange
     monkeypatch.chdir(tmp_path)
 
+    environment_variables = (
+        "HELPDESK_APP_NAME",
+        "HELPDESK_APP_VERSION",
+        "HELPDESK_ENVIRONMENT",
+        "HELPDESK_DEBUG",
+        "HELPDESK_API_V1_PREFIX",
+        "HELPDESK_DATABASE_URL",
+        "HELPDESK_JWT_SECRET_KEY",
+        "HELPDESK_JWT_ALGORITHM",
+        "HELPDESK_ACCESS_TOKEN_EXPIRE_MINUTES",
+    )
+
+    for variable in environment_variables:
+        monkeypatch.delenv(variable, raising=False)
+
     # Act
     settings = Settings()
 
