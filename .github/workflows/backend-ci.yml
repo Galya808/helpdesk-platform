@@ -1,0 +1,72 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+
+    env:
+      HELPDESK_ENVIRONMENT: testing
+      HELPDESK_DATABASE_URL: postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5432/helpdesk
+      HELPDESK_JWT_SECRET_KEY: ci-only-secret-key-not-for-production
+
+    services:
+      postgres:
+        image: postgres:18.3-alpine
+
+        env:
+          POSTGRES_USER: helpdesk
+          POSTGRES_PASSWORD: helpdesk_password
+          POSTGRES_DB: helpdesk
+
+        ports:
+          - "5432:5432"
+
+        options: >-
+          --health-cmd "pg_isready -U helpdesk -d helpdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run linter
+        run: uv run ruff check .
+
+      - name: Run static type checking
+        run: uv run mypy app tests
+
+      - name: Apply database migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest -q
