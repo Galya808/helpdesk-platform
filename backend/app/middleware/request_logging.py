@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from time import perf_counter
 
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 
 from app.core.request_context import (
     reset_request_id,
@@ -55,6 +56,10 @@ async def request_logging_middleware(
                 "duration_ms": duration_ms,
             },
         )
-        raise
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+            headers={"X-Request-ID": request_id},
+        )
     finally:
         reset_request_id(token)

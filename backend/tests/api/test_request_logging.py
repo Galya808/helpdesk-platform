@@ -114,14 +114,18 @@ async def test_failed_request_is_logged() -> None:
             transport=transport,
             base_url="http://test",
         ) as client:
-            # Act + Assert
-            with pytest.raises(RuntimeError, match="unexpected failure"):
-                await client.get(
-                    "/fail",
-                    headers={
-                        "X-Request-ID": "failed-request-id",
-                    },
-                )
+            # Act
+            response = await client.get(
+                "/fail",
+                headers={
+                    "X-Request-ID": "failed-request-id",
+                },
+            )
+
+        # Assert
+        assert response.status_code == 500
+        assert response.json() == {"detail": "Internal server error"}
+        assert response.headers["X-Request-ID"] == "failed-request-id"
 
         logger_mock.exception.assert_called_once()
         call_arguments = logger_mock.exception.call_args
