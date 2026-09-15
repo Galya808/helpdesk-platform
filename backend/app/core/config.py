@@ -29,6 +29,18 @@ class Settings(BaseSettings):
         default=30,
         gt=0,
     )
+    log_level: Literal[
+        "DEBUG",
+        "INFO",
+        "WARNING",
+        "ERROR",
+        "CRITICAL",
+    ] = "INFO"
+
+    log_format: Literal[
+        "console",
+        "json",
+    ] = "console"
 
 
 @lru_cache

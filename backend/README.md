@@ -99,10 +99,23 @@ Available environment variables:
 | `HELPDESK_DEBUG` | `false` | Enables or disables FastAPI debug mode |
 | `HELPDESK_API_V1_PREFIX` | `/api/v1` | Prefix for version 1 API routes |
 | `HELPDESK_DATABASE_URL` | `postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5433/helpdesk` | Asynchronous SQLAlchemy database connection URL |
+| `HELPDESK_LOG_LEVEL` | `INFO` | Minimum application log level |
+| `HELPDESK_LOG_FORMAT` | `console` | Log output format: `console` or `json` |
 
 The `.env` file is intended for local settings and must not be committed. The `.env.example` file contains safe example values and should remain in version control.
 
 Run Docker Compose commands from the repository root.
+
+## Request logging
+
+Every API response contains an `X-Request-ID` header. The application preserves
+a non-empty ID supplied by the client and generates a UUID when the header is
+missing.
+
+Each completed request is logged with its request ID, HTTP method, path, status
+code, and duration. Use the readable `console` format during local development
+and the structured `json` format in deployed environments. Request bodies,
+passwords, access tokens, and authorization headers are not logged.
 
 ## Database migrations
 
