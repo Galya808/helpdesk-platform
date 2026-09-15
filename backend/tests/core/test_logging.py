@@ -1,7 +1,9 @@
 import json
 import logging
 
-from app.core.logging import JsonFormatter
+import pytest
+
+from app.core.logging import JsonFormatter, configure_logging
 
 
 def test_json_formatter_produces_structured_log() -> None:
@@ -85,3 +87,88 @@ def test_json_formatter_ignores_sensitive_extra_fields() -> None:
     assert "access_token" not in log_data
 
     assert log_data["request_id"] == "request-id"
+
+
+def test_configure_logging_uses_json_formatter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    logger = logging.getLogger("app")
+    monkeypatch.setattr(logger, "handlers", [])
+    monkeypatch.setattr(logger, "level", logging.NOTSET)
+    monkeypatch.setattr(logger, "propagate", True)
+
+    # Act
+    configure_logging(
+        level="INFO",
+        log_format="json",
+    )
+
+    # Assert
+    assert logger.level == logging.INFO
+    assert logger.propagate is False
+    assert len(logger.handlers) == 1
+    assert isinstance(
+        logger.handlers[0],
+        logging.StreamHandler,
+    )
+    assert isinstance(
+        logger.handlers[0].formatter,
+        JsonFormatter,
+    )
+
+
+def test_configure_logging_uses_console_formatter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    logger = logging.getLogger("app")
+    monkeypatch.setattr(logger, "handlers", [])
+    monkeypatch.setattr(logger, "level", logging.NOTSET)
+    monkeypatch.setattr(logger, "propagate", True)
+
+    # Act
+    configure_logging(
+        level="DEBUG",
+        log_format="console",
+    )
+
+    # Assert
+    assert logger.level == logging.DEBUG
+    assert len(logger.handlers) == 1
+    assert isinstance(
+        logger.handlers[0].formatter,
+        logging.Formatter,
+    )
+    assert not isinstance(
+        logger.handlers[0].formatter,
+        JsonFormatter,
+    )
+
+
+def test_configure_logging_does_not_duplicate_handlers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    logger = logging.getLogger("app")
+    monkeypatch.setattr(logger, "handlers", [])
+    monkeypatch.setattr(logger, "level", logging.NOTSET)
+    monkeypatch.setattr(logger, "propagate", True)
+
+    # Act
+    configure_logging(
+        level="INFO",
+        log_format="console",
+    )
+    configure_logging(
+        level="DEBUG",
+        log_format="json",
+    )
+
+    # Assert
+    assert len(logger.handlers) == 1
+    assert logger.level == logging.DEBUG
+    assert isinstance(
+        logger.handlers[0].formatter,
+        JsonFormatter,
+    )
