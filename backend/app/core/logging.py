@@ -37,3 +37,24 @@ class JsonFormatter(logging.Formatter):
             log_data,
             ensure_ascii=False,
         )
+
+
+def configure_logging(
+    *,
+    level: str,
+    log_format: str,
+) -> None:
+    logger = logging.getLogger("app")
+    logger.handlers.clear()
+    handler = logging.StreamHandler()
+
+    if log_format == "json":
+        formatter: logging.Formatter = JsonFormatter()
+    else:
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+
+    handler.setFormatter(formatter)
+
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    logger.propagate = False
