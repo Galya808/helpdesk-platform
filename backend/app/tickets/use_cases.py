@@ -2,6 +2,8 @@ from uuid import UUID
 
 from app.tickets.exceptions import (
     ClosedTicketPriorityChangeError,
+    ClosedTicketReassignmentError,
+    InvalidTicketAssigneeError,
     InvalidTicketStatusTransitionError,
     TicketAlreadyAssignedError,
     TicketAssignmentForbiddenError,
@@ -9,11 +11,13 @@ from app.tickets.exceptions import (
     TicketNotAssignableError,
     TicketNotFoundError,
     TicketPriorityChangeForbiddenError,
+    TicketReassignmentForbiddenError,
     TicketStatusChangeForbiddenError,
 )
 from app.tickets.model import Ticket, TicketStatus
 from app.tickets.repository import TicketRepository
 from app.tickets.schemas import (
+    TicketAssigneeUpdate,
     TicketCreate,
     TicketListQuery,
     TicketPage,
@@ -22,7 +26,9 @@ from app.tickets.schemas import (
     TicketStatusUpdate,
 )
 from app.tickets.status_policies import create_ticket_status_policy
+from app.users.exceptions import UserNotFoundError
 from app.users.model import User, UserRole
+from app.users.repository import UserRepository
 
 
 class CreateTicket:
@@ -261,5 +267,46 @@ class ChangeTicketPriority:
         ticket.priority = data.priority
 
         saved_ticket = await self.repository.save(ticket)
+
+        return TicketRead.model_validate(saved_ticket)
+
+
+class ReassignTicket:
+    def __init__(
+        self,
+        ticket_repository: TicketRepository,
+        user_repository: UserRepository,
+    ) -> None:
+        self.ticket_repository = ticket_repository
+        self.user_repository = user_repository
+
+    async def execute(
+        self,
+        *,
+        ticket_id: UUID,
+        data: TicketAssigneeUpdate,
+        current_user: User,
+    ) -> TicketRead:
+        if current_user.role is not UserRole.ADMIN or current_user.is_blocked:
+            raise TicketReassignmentForbiddenError
+
+        ticket = await self.ticket_repository.get_by_id_for_update(ticket_id)
+
+        if ticket is None:
+            raise TicketNotFoundError
+
+        if ticket.status is TicketStatus.CLOSED:
+            raise ClosedTicketReassignmentError
+
+        assignee = await self.user_repository.get_by_id(data.assignee_id)
+
+        if assignee is None:
+            raise UserNotFoundError
+
+        if assignee.role is not UserRole.SUPPORT_AGENT or assignee.is_blocked:
+            raise InvalidTicketAssigneeError
+
+        ticket.assignee_id = assignee.id
+        saved_ticket = await self.ticket_repository.save(ticket)
 
         return TicketRead.model_validate(saved_ticket)
