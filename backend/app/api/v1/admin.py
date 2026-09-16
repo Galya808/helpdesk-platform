@@ -4,6 +4,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.dependencies import CurrentUser, DatabaseSession
+from app.tickets.exceptions import (
+    ClosedTicketReassignmentError,
+    InvalidTicketAssigneeError,
+    TicketNotFoundError,
+    TicketReassignmentForbiddenError,
+)
+from app.tickets.repository import TicketRepository
+from app.tickets.schemas import TicketAssigneeUpdate, TicketRead
+from app.tickets.use_cases import ReassignTicket
 from app.users.exceptions import (
     UserManagementForbiddenError,
     UserNotFoundError,
@@ -130,4 +139,59 @@ async def change_user_blocked_status(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
+        ) from error
+
+
+@router.patch(
+    "/tickets/{ticket_id}/assignee",
+    response_model=TicketRead,
+)
+async def reassign_ticket(
+    ticket_id: UUID,
+    data: TicketAssigneeUpdate,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+) -> TicketRead:
+    use_case = ReassignTicket(
+        ticket_repository=TicketRepository(session),
+        user_repository=UserRepository(session),
+    )
+
+    try:
+        ticket = await use_case.execute(
+            ticket_id=ticket_id,
+            data=data,
+            current_user=current_user,
+        )
+        await session.commit()
+        return ticket
+    except TicketReassignmentForbiddenError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ticket reassignment is restricted to administrators",
+        ) from error
+    except TicketNotFoundError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        ) from error
+    except UserNotFoundError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assignee not found",
+        ) from error
+    except InvalidTicketAssigneeError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Assignee must be an active support agent",
+        ) from error
+    except ClosedTicketReassignmentError as error:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Closed tickets cannot be reassigned",
         ) from error
