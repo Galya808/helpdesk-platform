@@ -32,3 +32,15 @@ class TicketPriorityChangeForbiddenError(Exception):
 
 class ClosedTicketPriorityChangeError(Exception):
     """Raised when priority cannot be changed for a closed ticket."""
+
+
+class TicketReassignmentForbiddenError(Exception):
+    """Raised when a user cannot reassign tickets."""
+
+
+class InvalidTicketAssigneeError(Exception):
+    """Raised when the target user is not an active support agent."""
+
+
+class ClosedTicketReassignmentError(Exception):
+    """Raised when a closed ticket cannot be reassigned."""

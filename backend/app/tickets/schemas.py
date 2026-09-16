@@ -78,3 +78,9 @@ class TicketPriorityUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     priority: TicketPriority
+
+
+class TicketAssigneeUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    assignee_id: UUID
