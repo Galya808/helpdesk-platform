@@ -65,3 +65,15 @@ class UserPage(BaseModel):
     @property
     def pages(self) -> int:
         return (self.total + self.page_size - 1) // self.page_size
+
+
+class UserRoleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: UserRole
+
+
+class UserBlockedUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_blocked: bool

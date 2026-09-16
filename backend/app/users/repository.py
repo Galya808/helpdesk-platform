@@ -70,3 +70,9 @@ class UserRepository:
         result = await self.session.execute(statement)
 
         return result.scalar_one()
+
+    async def save(self, user: User) -> User:
+        await self.session.flush()
+        await self.session.refresh(user)
+
+        return user

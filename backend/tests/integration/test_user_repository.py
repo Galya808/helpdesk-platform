@@ -202,3 +202,45 @@ async def test_list_returns_paginated_users() -> None:
         await delete_test_user(first_email)
         await delete_test_user(second_email)
         await delete_test_user(third_email)
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio(loop_scope="session")
+async def test_save_updates_user_role() -> None:
+    # Arrange
+    customer_email = f"customer-{uuid4()}@example.com"
+
+    try:
+        customer = await create_test_user(
+            email=customer_email,
+            password="strong-password",
+        )
+
+        async with async_session_factory() as session, session.begin():
+            # Act
+            repository = UserRepository(session)
+
+            user = await repository.get_by_id(customer.id)
+
+            # Assert
+            assert user is not None
+
+            # Act
+            user.role = UserRole.SUPPORT_AGENT
+            saved_user = await repository.save(user)
+
+            # Assert
+            assert saved_user is user
+            assert saved_user.role is UserRole.SUPPORT_AGENT
+
+        async with async_session_factory() as session:
+            # Act
+            repository = UserRepository(session)
+            persisted_user = await repository.get_by_id(customer.id)
+
+            # Assert
+            assert persisted_user is not None
+            assert persisted_user.role is UserRole.SUPPORT_AGENT
+
+    finally:
+        await delete_test_user(customer_email)
