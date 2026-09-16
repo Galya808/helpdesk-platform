@@ -1,18 +1,24 @@
+from uuid import UUID
+
 from app.security.password import dummy_password_hash, hash_password, verify_password
 from app.users.exceptions import (
     BlockedUserError,
     EmailAlreadyRegisteredError,
     InvalidCredentialsError,
     UserManagementForbiddenError,
+    UserNotFoundError,
+    UserSelfManagementForbiddenError,
 )
 from app.users.model import User, UserRole
 from app.users.repository import UserRepository
 from app.users.schemas import (
+    UserBlockedUpdate,
     UserCreate,
     UserListQuery,
     UserLogin,
     UserPage,
     UserRead,
+    UserRoleUpdate,
 )
 
 
@@ -92,3 +98,59 @@ class ListUsers:
             page_size=query.page_size,
             total=user_count,
         )
+
+
+class ChangeUserRole:
+    def __init__(self, repository: UserRepository) -> None:
+        self.repository = repository
+
+    async def execute(
+        self,
+        *,
+        user_id: UUID,
+        data: UserRoleUpdate,
+        current_user: User,
+    ) -> UserRead:
+        if current_user.role is not UserRole.ADMIN or current_user.is_blocked:
+            raise UserManagementForbiddenError
+
+        if user_id == current_user.id:
+            raise UserSelfManagementForbiddenError
+
+        user = await self.repository.get_by_id(user_id)
+
+        if user is None:
+            raise UserNotFoundError
+
+        user.role = data.role
+        saved_user = await self.repository.save(user)
+
+        return UserRead.model_validate(saved_user)
+
+
+class ChangeUserBlockedStatus:
+    def __init__(self, repository: UserRepository) -> None:
+        self.repository = repository
+
+    async def execute(
+        self,
+        *,
+        user_id: UUID,
+        data: UserBlockedUpdate,
+        current_user: User,
+    ) -> UserRead:
+        if current_user.role is not UserRole.ADMIN or current_user.is_blocked:
+            raise UserManagementForbiddenError
+
+        if user_id == current_user.id:
+            raise UserSelfManagementForbiddenError
+
+        user = await self.repository.get_by_id(user_id)
+
+        if user is None:
+            raise UserNotFoundError
+
+        user.is_blocked = data.is_blocked
+        saved_user = await self.repository.save(user)
+
+        return UserRead.model_validate(saved_user)
