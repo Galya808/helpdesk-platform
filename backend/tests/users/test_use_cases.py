@@ -1,4 +1,5 @@
 from unittest.mock import AsyncMock, patch
+from uuid import uuid4
 
 import pytest
 
@@ -7,11 +8,12 @@ from app.users.exceptions import (
     BlockedUserError,
     EmailAlreadyRegisteredError,
     InvalidCredentialsError,
+    UserManagementForbiddenError,
 )
-from app.users.model import User
+from app.users.model import User, UserRole
 from app.users.repository import UserRepository
-from app.users.schemas import UserCreate, UserLogin
-from app.users.use_cases import AuthenticateUser, RegisterUser
+from app.users.schemas import UserCreate, UserListQuery, UserLogin
+from app.users.use_cases import AuthenticateUser, ListUsers, RegisterUser
 
 
 @pytest.mark.asyncio
@@ -196,3 +198,104 @@ async def test_authentication_fails_for_blocked_user() -> None:
 
     repo.get_by_email.assert_awaited_once_with(str(user_data.email))
     repo.create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_admin_lists_users() -> None:
+    # Arrange
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+    )
+
+    query = UserListQuery(
+        page=2,
+        page_size=10,
+    )
+
+    repository = AsyncMock(spec=UserRepository)
+    repository.list.return_value = []
+    repository.count.return_value = 15
+
+    use_case = ListUsers(repository)
+
+    # Act
+    result = await use_case.execute(
+        query=query,
+        current_user=admin,
+    )
+
+    # Assert
+    assert result.items == []
+    assert result.page == 2
+    assert result.page_size == 10
+    assert result.total == 15
+    assert result.pages == 2
+
+    repository.list.assert_awaited_once_with(
+        offset=10,
+        limit=10,
+    )
+    repository.count.assert_awaited_once_with()
+
+
+@pytest.mark.parametrize(
+    "role",
+    [
+        UserRole.CUSTOMER,
+        UserRole.SUPPORT_AGENT,
+    ],
+)
+@pytest.mark.asyncio
+async def test_non_admin_cannot_list_users(role: UserRole) -> None:
+    # Arrange
+    current_user = User(
+        id=uuid4(),
+        email="user@example.com",
+        hashed_password="hashed-password",
+        role=role,
+    )
+
+    query = UserListQuery()
+
+    repository = AsyncMock(spec=UserRepository)
+    use_case = ListUsers(repository)
+
+    # Act + Assert
+    with pytest.raises(UserManagementForbiddenError):
+        await use_case.execute(
+            query=query,
+            current_user=current_user,
+        )
+
+    repository.list.assert_not_awaited()
+    repository.count.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_blocked_admin_cannot_list_users() -> None:
+    # Arrange
+    admin = User(
+        id=uuid4(),
+        email="admin@example.com",
+        hashed_password="hashed-password",
+        role=UserRole.ADMIN,
+        is_blocked=True,
+    )
+
+    query = UserListQuery()
+
+    repository = AsyncMock(spec=UserRepository)
+    use_case = ListUsers(repository)
+
+    # Act + Assert
+    with pytest.raises(UserManagementForbiddenError):
+        await use_case.execute(
+            query=query,
+            current_user=admin,
+        )
+
+    repository.list.assert_not_awaited()
+    repository.count.assert_not_awaited()

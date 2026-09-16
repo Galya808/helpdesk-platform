@@ -8,3 +8,7 @@ class InvalidCredentialsError(Exception):
 
 class BlockedUserError(Exception):
     """Raised when a blocked user tries to log in"""
+
+
+class UserManagementForbiddenError(Exception):
+    """Raised when a non-admin tries to manage users."""
