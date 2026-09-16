@@ -2,7 +2,14 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    computed_field,
+    field_validator,
+)
 
 from app.users.model import UserRole
 
@@ -37,3 +44,36 @@ class UserCreate(NormalizedEmailSchema):
 
 class UserLogin(NormalizedEmailSchema):
     password: Password
+
+
+class UserListQuery(BaseModel):
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.page_size
+
+
+class UserPage(BaseModel):
+    items: list[UserRead]
+    page: int
+    page_size: int
+    total: int
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def pages(self) -> int:
+        return (self.total + self.page_size - 1) // self.page_size
+
+
+class UserRoleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: UserRole
+
+
+class UserBlockedUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_blocked: bool
