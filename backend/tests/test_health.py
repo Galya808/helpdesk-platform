@@ -22,3 +22,20 @@ async def test_get_health_returns_http_200() -> None:
     # Assert
     assert response.status_code == 200
     assert body == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_frontend_origin_is_allowed_by_cors() -> None:
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.options(
+            "/health",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == ("http://localhost:3000")

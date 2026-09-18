@@ -19,6 +19,7 @@ def test_settings_have_expected_defaults(
         "HELPDESK_ENVIRONMENT",
         "HELPDESK_DEBUG",
         "HELPDESK_API_V1_PREFIX",
+        "HELPDESK_CORS_ORIGINS",
         "HELPDESK_DATABASE_URL",
         "HELPDESK_JWT_SECRET_KEY",
         "HELPDESK_JWT_ALGORITHM",
@@ -39,6 +40,10 @@ def test_settings_have_expected_defaults(
     assert settings.environment == "development"
     assert settings.debug is False
     assert settings.api_v1_prefix == "/api/v1"
+    assert settings.cors_origins == [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
     assert settings.database_url == (
         "postgresql+asyncpg://helpdesk:helpdesk_password@localhost:5433/helpdesk"
     )
