@@ -9,6 +9,16 @@ A full-stack, role-based helpdesk application built to demonstrate production-or
 
 > The API runs on Render's free tier. Its first request after inactivity can take up to a minute while the service starts.
 
+## Screenshots
+
+### Landing page
+
+![Helpdesk Platform landing page](./docs/images/home.png)
+
+### Authentication
+
+![Helpdesk Platform sign-in page](./docs/images/login.png)
+
 ## What the application does
 
 The platform supports three roles with different permissions:
