@@ -79,6 +79,21 @@ When the application is running, Swagger UI is available at
 The health-check endpoint is available at
 `http://127.0.0.1:8000/health`.
 
+## Metrics
+
+Prometheus-compatible application metrics are available at
+`http://127.0.0.1:8000/metrics`.
+
+The application exposes:
+
+- `helpdesk_http_requests_total` — completed HTTP requests;
+- `helpdesk_http_request_duration_seconds` — request duration;
+- `helpdesk_http_requests_in_progress` — requests currently being processed.
+
+Completed-request metrics use the HTTP method, route template, and status code
+as labels. Dynamic values such as UUIDs, emails, access tokens, and request IDs
+are not used as labels. Requests to `/metrics` are excluded from these metrics.
+
 ## Running with Docker
 
 Run Docker Compose commands from the repository root. Build and start the API
