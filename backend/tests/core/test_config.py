@@ -92,6 +92,25 @@ def test_environment_variable_overrides_database_url(
     )
 
 
+@pytest.mark.parametrize("scheme", ["postgresql", "postgres"])
+def test_database_url_uses_async_driver(
+    scheme: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv(
+        "HELPDESK_DATABASE_URL",
+        f"{scheme}://user:password@database:5432/helpdesk",
+    )
+
+    settings = Settings()
+
+    assert settings.database_url == (
+        "postgresql+asyncpg://user:password@database:5432/helpdesk"
+    )
+
+
 def test_debug_environment_variable_is_converted_to_boolean(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
