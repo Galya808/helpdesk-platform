@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,6 +45,16 @@ class Settings(BaseSettings):
         "console",
         "json",
     ] = "console"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def use_async_postgresql_driver(cls, value: object) -> object:
+        if isinstance(value, str):
+            if value.startswith("postgresql://"):
+                return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+            if value.startswith("postgres://"):
+                return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        return value
 
 
 @lru_cache
