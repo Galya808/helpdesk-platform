@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Helpdesk Platform Frontend
 
-## Getting Started
+Lightweight Next.js interface for the Helpdesk Platform API.
 
-First, run the development server:
+## Requirements
+
+- Node.js 20.9 or newer
+- npm
+- the backend running on port `8000`
+
+## Installation
+
+From the `frontend` directory:
+
+```bash
+npm install
+cp .env.example .env.local
+```
+
+## Configuration
+
+`NEXT_PUBLIC_API_URL` contains the public backend URL used by the browser.
+The local default is `http://127.0.0.1:8000`.
+
+Never store secrets in variables prefixed with `NEXT_PUBLIC_` because their
+values are included in the browser bundle.
+
+## Development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Quality checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm run build
+```
 
-## Learn More
+## Features
 
-To learn more about Next.js, take a look at the following resources:
+- backend health status
+- customer registration and authentication
+- role-aware navigation
+- ticket creation, filtering, pagination, and detail views
+- ticket comments
+- support-agent assignment, status, and priority operations
+- administrator user, role, blocked-account, and reassignment operations
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The frontend improves usability, but the FastAPI backend remains responsible
+for authentication and authorization.
