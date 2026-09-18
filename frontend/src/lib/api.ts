@@ -13,6 +13,7 @@ export class ApiError extends Error {
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
+  accessToken?: string,
 ): Promise<T> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const headers = new Headers(options.headers);
@@ -23,6 +24,10 @@ export async function apiRequest<T>(
 
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
   }
 
   const response = await fetch(`${env.apiUrl}${normalizedPath}`, {
