@@ -79,6 +79,49 @@ When the application is running, Swagger UI is available at
 The health-check endpoint is available at
 `http://127.0.0.1:8000/health`.
 
+## Running with Docker
+
+Run Docker Compose commands from the repository root. Build and start the API
+and PostgreSQL services:
+
+```bash
+docker compose up -d --build
+```
+
+Check container health:
+
+```bash
+docker compose ps
+```
+
+Follow the API logs:
+
+```bash
+docker compose logs -f api
+```
+
+The API container waits for PostgreSQL, applies Alembic migrations, and then
+starts Uvicorn. To run migrations manually:
+
+```bash
+docker compose exec api alembic upgrade head
+```
+
+Stop the services without deleting database data:
+
+```bash
+docker compose down
+```
+
+Delete the containers and the local PostgreSQL volume:
+
+```bash
+docker compose down --volumes
+```
+
+The API is available at `http://127.0.0.1:8000`, and Swagger UI is available
+at `http://127.0.0.1:8000/docs`.
+
 ## Configuration
 
 Application settings are managed with Pydantic Settings.
